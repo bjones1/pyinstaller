@@ -268,35 +268,19 @@ def test_PyQt5_uic(tmpdir, pyi_builder, data_dir, monkeypatch):
     pyi_builder.test_script('pyi_lib_PyQt5-uic.py')
 
 
-# Produce the source code for QWebEngine tests by inserting the path of an HTML
-# page to display.
-def get_QWebEngine_html(qt_flavor, data_dir):
-    return """
-        from {0}.QtWidgets import QApplication
-        from {0}.QtWebEngineWidgets import QWebEngineView
-        from {0}.QtCore import QUrl, QTimer
-
-        app = QApplication([])
-        view = QWebEngineView()
-        view.load(QUrl.fromLocalFile({1}))
-        view.show()
-        view.page().loadFinished.connect(
-            # Display the web page for one second after it loads.
-            lambda ok: QTimer.singleShot(1000, app.quit))
-        app.exec_()
-        """.format(qt_flavor,
-                   # Use repr to avoid accidental special characters in Windows
-                   # filenames: ``c:\temp`` is ``c<tab>emp``!
-                   repr(data_dir.join('test_web_page.html').strpath))
-
-
 @pytest.mark.skipif(is_win and not is_64bits, reason="Qt 5.11+ for Windows "
     "only provides pre-compiled Qt WebEngine binaries for 64-bit processors.")
 @pytest.mark.skipif(is_module_satisfies('PyQt5 == 5.11.3') and is_darwin,
     reason='This version of the OS X wheel does not include QWebEngine.')
-@importorskip('PyQt5')
-def test_PyQt5_QWebEngine(pyi_builder, data_dir, monkeypatch):
-    path_clean(monkeypatch, 'PyQt5')
+@pytest.mark.parametrize('QtPyLib', [
+    'PyQt5',
+    pytest.param('PySide2',
+                 marks=xfail(True, reason='Hook needs updating.'))
+])
+def test_PyQt5_QWebEngine(pyi_builder, data_dir, monkeypatch, QtPyLib):
+    path_clean(monkeypatch, QtPyLib)
+    pytest.importorskip(QtPyLib)
+
     if is_darwin:
         # This tests running the QWebEngine on OS X. To do so, the test must:
         #
@@ -321,8 +305,25 @@ def test_PyQt5_QWebEngine(pyi_builder, data_dir, monkeypatch):
     # 3. Run the test with specific command-line arguments. Otherwise, OS X
     # builds fail. Also use this for the Linux and Windows builds, since this is
     # a common case.
-    pyi_builder.test_source(get_QWebEngine_html('PyQt5', data_dir),
-                            **USE_WINDOWED_KWARG)
+    pyi_builder.test_source(
+        """
+        from {0}.QtWidgets import QApplication
+        from {0}.QtWebEngineWidgets import QWebEngineView
+        from {0}.QtCore import QUrl, QTimer
+
+        app = QApplication([])
+        view = QWebEngineView()
+        view.load(QUrl.fromLocalFile({1}))
+        view.show()
+        view.page().loadFinished.connect(
+            # Display the web page for one second after it loads.
+            lambda ok: QTimer.singleShot(1000, app.quit))
+        app.exec_()
+        """.format(QtPyLib,
+                   # Use repr to avoid accidental special characters in Windows
+                   # filenames: ``c:\temp`` is ``c<tab>emp``!
+                   repr(data_dir.join('test_web_page.html').strpath)),
+        **USE_WINDOWED_KWARG)
 
 
 @PYQT5_NEED_OPENGL
@@ -430,13 +431,6 @@ def test_Qt5_QTranslate(pyi_builder, monkeypatch, QtPyLib):
             print('Qt locale %s not found!' % locale.name())
             assert False
         """.format(QtPyLib))
-
-
-@xfail(True, reason="Hook is old and needs updating.")
-@importorskip('PySide2')
-def test_PySide2_QWebEngine(pyi_builder, data_dir):
-    pyi_builder.test_source(get_QWebEngine_html('PySide2', data_dir),
-                            **USE_WINDOWED_KWARG)
 
 
 @importorskip('zope.interface')
